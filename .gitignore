@@ -1,0 +1,20 @@
+# things that pro'ly should not get checked-in to code-repo
+
+# tf-artifacts
+**/.terraform
+**/*.tfstate
+**/*.tfstate.backup
+
+# swap-files
+[._]*.s[a-v][a-z]
+[._]*.sw[a-p]
+[._]s[a-rt-v][a-z]
+[._]ss[a-gi-z]
+[._]sw[a-p]
+*~
+
+# python-stuff
+venv/
+.venv/
+*.retry
+.bundle
