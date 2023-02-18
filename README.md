@@ -7,6 +7,7 @@ UPDATED: 2023-FEB17 - added README.md and other inline documentation
 
 ___
 ![Secret Page Screenshot](screenshots/quest-success.png)
+the screenshot above was scraped from http://quest.LogicWizards.net which was produced by terraform using the code at [github/wwwizards/quest](https://github.com/wwwizards/quest). This document tells the story.
 
 ## Mission Overview
 
@@ -78,13 +79,15 @@ Upon the launch of any new webserver node within the auto-scaling group as defin
 
 ```
 
-The dockerfile is created during the 3rd-step of the initialization of any new server added to the ASG.
+The dockerfile is created during the 3rd-step of the initialization of any new server added to the ASG. This is the poor man's workaround for not having a proper ci/cd pipeline. The snip-it below illustrates the concept.
 
 ```
 ####################################################################################
-# STEP-3: Wrap everything neatly in a simple dockerfile  
+# STEP-3: Wrap everything neatly in a simple dockerfile
+#  (i.e. use terraform to write bash to create a dockerfile)  
 ####################################################################################
-cat > Dockerfile << EOF
+cat > Dockerfile << HEREDOC
+# this dockerfile was created by the user-data script via IaC ec2-asg.tf 
 # use node as container base-image
 FROM node:16
 # inject environment variables & copy the stuff we pulled from git to the container
@@ -97,9 +100,12 @@ RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.34.0/install.sh | b
     && npm install
 # run express server
 CMD ["npm", "start"]
-EOF
-```
 
+HEREDOC
+
+echo -e "\n\n# TIMESTAMP: $(date)\n\n" >> Dockerfile
+```
+---
 ### ROADMAP DAY-0 - CAVEAT EMPTOR: YOU ARE --> HERE!
 ## Prerequisites
 
@@ -113,8 +119,14 @@ EOF
 
 **Deployment example using git:**
 ```
-git clone https://github.com/wwwizards/MY_PUBLIC_REPO_NAME.git
+git clone https://github.com/wwwizards/quest.git
+
 terraform init && terraform apply
+```
+
+**Deployment example using git:**
+```
+terraform destroy  
 ```
 
 NOTE: From my experience it takes somewhere between 5-7 minutes to deploy.
@@ -133,14 +145,14 @@ I will be happy to provide examples (and even some plug-n-play sample code) like
 
 ### ROADMAP DAY-2 - Other Improvements 
 
-1. - **Implement Continuous Integration** : using Jenkins or Codebuild some other CI pipeline that imports this GitHub repo's latest master branch when triggered by a commit using some kind of hook. 
+1. - **Implement Continuous Integration** :  ask me about the benefits of using Jenkins or Codebuild, or some other CI pipeline that imports this GitHub repo's latest master branch when triggered by a commit using some kind of hook. 
       -  The additional ``jenkinsfile`` ``buildspec.yml`` and ``Dockerfile`` should direct the CI to create a Docker image from the latest build of the Rearc Quest application, and then push that resulting Docker image into an ECR repository for storage and deployment in Phase-two. 
    -  Additionally we can utilize DoD-Spec (pre-hardened) base-images by using [Iron Bank](https://p1.dso.mil/products/iron-bank). It's free (as in free beer) makes our jobs easier, keeps the CyberSecurity folks happy, and decreases the blast-radius of those CRITICAL & HIGH errors you will inevitably see in the ECR scan results - usually within a day or two. 
 1. **Implement tagging module** to produce standard tags on all resources  
 1. **Replace EC2 nodes & ASG with an ECS cluster** - by adding a few task & service definitions, we can utilize the basic HA auto scaling configurations that are built into ECS - to run the "dockerized" version of the Rearc Quest application using an AWS-Fargate serverless solution. 
    - This will provide better healthcheck capabilities than ASGs alone 
    - The new ECS cluster can be routed through the same VPC and Loadbalancer (already provisioned) and cutover with a BLUE/GREEN deployment method and zero-downtime. 
-1. performance monitoring/alerting/automation with cloudwatch & triggers
-1. log aggregation
+1. Ask me about the benefits of performance monitoring/alerting/automation with cloudwatch & triggers.
+1. Ask me about  the benefits of log aggregation. 
 
 #
