@@ -1,143 +1,232 @@
-# Joe Negron's Rearc Quest Submission ___
-PROJECT: Rearc Quest | Terraform+Docker POC on AWS
+# mbdt-infrastructure
+----
+**ABSTRACT:** Terraform scripts are being used manage our infrastructure as code (IaC) and to help us create AWS resources for `AeroCloud-OntologyHub` project which includes IAM Roles, EC2 Instances, ECS (Fargate) clusters & services, Task Definitions, L4 & L7 Load Balancers, Target Groups & Routing Rules, Security Groups, Route53 DNS records and anything & everything else we can imagine... The terraform scripts can be executed the via CLI or through jenkins pipelines.  
 
-CREATED: 2023-FEB15 - by Joe.Negron.NYC@gmail.com
+**OVERVIEW:** When Terraform is getting ready to do stuff (i.e. planning, applying or destroying resources), the CLI tool searches for valid .tf-files in the current working directory (AKA: 'tf-root'). Before the terraform executable does anything, all those files are sorted (alphanumerically) and then merged into a single file which then gets used with whatever command that fired it. This can be used to our advantage in order to help with transparency and management of Terraform files - as it allows us to segregate specialized code (such that used for providers, resources and outputs) into different, smaller, and easier-to-read files that are grouped according to what they do. Typically you'd see separate tf files for main, variables, and outputs - but there are no rules. Other files like tfvars files are hadled in a simlar fashion but are applied using a different order of precedence. Although terraform usage is outside of the scope of this document, there are plenty of resources available on hashicorp's website. The book I found most useful was __O'REILLY: Terraform Up & Running__ and theis was used as a guide for best-practices.
 
-UPDATED: 2023-FEB17 - added RAEDME.md and other inline documentation
+**STANDARDS:** For this project, I try to keep all the helper-scripts in the git-root, and keep all the terraform files in the tf-root AKA: "ontologyhub-tf". Soon there may also be a "ontologyhub-ans" for ansible stuff, etc... I also like to keep a README.md in each directory with the necessary details needed for that level of documentation.
 
-___
-![Secret Page Screenshot](readme_images/screenshot.png)
-
-## Mission Overview
-
-The Infrastructure as Code (IaC) described herein shall facilitate the deployment and teardown of the IaaS components necessary to host a "dockerized" version of the Rearc Quest application - through the implementation of AWS Cloud Services using the standard AWS-CLI and executed purely via Terraform. All files needed to replicate this solution into your AWS account, are contained within this single directory structure. The latest version of the application's source code is contained within a separate public git-repo. The initial deployment will: (1) build a load balanced infrastructure; (2) pull the latest code from the app-repo; (3) wrap that code in a dockerfile and expose the running app to the internet via HTTP; (4) wrap all HTTP traffic in TLS for standard HTTPS.  
-
-## Solution Requirements
-This solution has been tested with terraform v0.13.x and v1.1.x. Other than the code itself, this solution requres only the AWS-CLI, configured with the appropriate credentials (or IAM-Role), to deploy into the target AWS account using the Terraform executable.
-
-
-
-## Acceptance Criteria
-### Milestones 
-You may do all or some of the following tasks. Please read over the complete list before starting.
-
-1. If you know how to use git, start a git repository (local-only is acceptable) and commit all of your work to it.
-1. Use Infrastructure as Code (IaC) to the deploy the code as specified below.
-   - Terraform is ideal, but use whatever you know, e.g. CloudFormation, CDK, Deployment Manager, etc.
-1. Deploy the app in a container in any public cloud using the services you think best solve this problem.
-   - Use `node` as the base image. Version `node:10` or later should work.
-1. Navigate to the index page to obtain the SECRET_WORD.
-1. Inject an environment variable (`SECRET_WORD`) in the Docker container using the value on the index page.
-1. Deploy a load balancer in front of the app.
-1. Add TLS (https). You may use locally-generated certs.
-
-### Definition of Done
-Each stage can be tested as follows (where `<ip_or_host>` is the location where the app is deployed):
-
-- [x] Public cloud & index page (contains the secret word) - `http(s)://<ip_or_host>[:port]/`
-- [x] Docker check - `http(s)://<ip_or_host>[:port]/docker`
-- [x] Secret Word check - `http(s)://<ip_or_host>[:port]/secret_word`
-- [x] Load Balancer check  - `http(s)://<ip_or_host>[:port]/loadbalanced`
-- [x] TLS check - `http(s)://<ip_or_host>[:port]/tls`
-
-
-## Simple Design: "Web Servers Behind a Load Balancer"
-This Terraform code adheres to best practices surrounding one of the simplest design patterns: *"Two+ WebServers Behind a Load Balancer"* is to attach an AWS ACM Certificate to an ALB to allow HTTPS traffic uses Terraform Modules for compartmentalized code maintenance.
-
-## Architectural Elements
-As defined in the `main.tf` file (contained within in the root of this Terraform code directory), a single `terraform apply` command will create the following AWS resources in US-East-1:
-
-1. A custom VPC with 2 public subnets (for load balancers), 2 private subnets (for web servers), public route tables (to govern access controls)
-1. Two Security Groups (EC2-SG) ALB-SG & Webserver-SG
-1. A Single Layer-7 Load Balancer (ELBv2-L7) Multi-Zone ALB
-1. A Single Autoscaling Group (EC2-ASG) with a min of 2 and max of 3 minimal webservers (EC2+A2Linux) each running Docker and a single NodeJS Base Image to host the custom application.
-
-## Deployment Process 
-Upon the launch of any new webserver node within the auto-scaling group as defined within `modules/compute/ec2-asg.tf` in 
-
-## IaC Directory Structure
+**Directory Structure (updated for v0.3)**
 ```
 .
-├── dockerizer.sh
-├── main.tf
-├── modules
-│   ├── compute
-│   │   ├── ec2-asg.tf
-│   │   ├── outputs.tf
-│   │   └── variables.tf
-│   ├── dns
-│   │   ├── outputs.tf
-│   │   ├── route53.tf
-│   │   └── variables.tf
-│   └── network
-│       ├── networking.tf
-│       ├── outputs.tf
-│       └── variables.tf
-├── provider-aws.tf
+├── assume-aws-role.sh    (helper script for multi-account mgmt via IAM roles)
+├── jenkinsfile    (declarative groovy file used to define the ci/cd pipeline)
+├── ontologyhub-tf   (formerly: mbdt-tf - this is where all the magic happens)
+│   ├── alb01_rules.tf (this is where all the forwarding rules live - for now)
+│   ├── alb01.tf  (the new load balancer - TESTED: 29-DEC)
+│   ├── artifacts (temp folder for build artifacts)
+│   │   ├── 2022jan05-133951-est-qa-tf-iac-jenkins.tfplan 
+│   │   └── 2022jan05-133951-est-qa-tf-iac-jenkins.txt
+│   ├── configs (previously broken & completely undocumented - now works in QA)
+│   │   ├── default.tfvars
+│   │   ├── prod.tfvars
+│   │   ├── qa.tfvars     (Joe's new & improved version of below)
+│   │   └── qa.tfvars.edx (this was inherited from the EDX team)
+│   ├── locals.tf 
+│   ├── main.tf (this is where it all begins)
+│   ├── modules (this is new - as of December)
+│   │   ├── alb01_rules_helper (this is new)
+│   │   │   ├── main.tf
+│   │   │   ├── README.md
+│   │   │   └── variables.tf
+│   │   └── svc_template (work in progress for SKOS)
+│   │       ├── main.tf
+│   │       └── variables.tf
+│   ├── provider.tf (tweaked for)
+│   ├── svc_lode.tf         (TESTED: 29-DEC)
+│   ├── svc_portal.tf       (TESTED: 29-DEC)
+│   ├── svc_publisher.tf    (TESTED: 29-DEC)
+│   ├── svc_skos.tf.disabled  (in-progress)
+│   ├── svc_webvowl.tf      (TESTED: 29-DEC)
+│   └── variables.tf
 ├── README.md
+├── tf-disable (helper script to quickly disable tf code)
+├── tf-easy.sh (change aws-role, get s3-state & do tf:init/validate/plan all-in-one)
+├── tf-enable (helper script to quickly enable tf code)
+└── WIP-Jenkins.txt
+ 
+
+    2 directories, 14 files
 
 ```
 
-The dockerfile is created during the 3rd-step of the initialization of any new server added to the ASG.
+## Change History 
+---
+### v0.0 - (2021-JUL) tf-iac branch handed off from the EDX team  
+---
+### v0.1 - (2021-NOV) tf-iac-qa branched from above by Joe Negron
+GOAL: Discovery & Refactor (PHASE-1)
+- ADD: now includes cross-account functionality for multiple environments
+- ADD: new assume-aws-role.sh enhancements using AWS STS for multiple accounts
+- FIX: fully functional s3-backend maintained in each environment (no more manual copying)
+- ADD: tf-switch to facilitate terraform version updates from beta v0.13.5 to v1.x.x
+- ADD: tf-easy.sh to do tf-init, pull state from s3, format & validate the code, & create a tf-plan
+- FIX: eliminated errors & warnings to reduce deploy times by half (now less than one-hour)
+- ADD: tf-graph and visualizer to help identify deltas in new tf-plan files
+- BUG: identified bug in terraform aws provider & submitted issue to maintainers for resolution
+- MOD: remove tf-workspaces (design flaw) for better scalability
+- REQ: Pull request made for code fully-tested & demo'd in the QA environment 
+---
+### v0.2 - (2021-DEC) tf-iac-alb branched from above by Joe Negron
+GOAL: a single ALB for all ECS services as frontend to above fargate cluster and triggered from Jenkins
+- ADD: new module as rules-helper for ALB01
+- MOD: refactor for breaking changes in tf-v1.x
+- ADD: audits & housekeeping for assume-role helper
+- MOD: begin scaffolding for new containers module
+- ADD: create terraform.log & aws.log for auditing & compliance
+- ADD: install jenkins-agent on iac-mgmt server and 
+- ADD: integration with jenkins-master via SSH using PKI
+- REM: eliminated broken jenkins terraform-plugin inehrited from EDX (abandoned in 2018)
+- ADD: jenkinsfile for simple pipeline to apply tf-plan from above with Auto-Approve
+- FIX: jenkins git-plugin no longer uses headless-mode for git-fetch
+- ADD: jenkins service-account implemented & hardened for compliance
+- FIX: backup & restore unix permissions using git-hooks (pre-commit & post-fetch)
+- FIX: aws tf-provider now fixed in v3.69+ to eliminate BUG from above
+- ADD: groovy-script logic for 3-stage conditional pipeline
+- ADD: Human approval gates before APPLY stage  
+- ADD: DNS & wildcard certs for qa.ontologyhub.utc.com (manually)
+
+**Test Results:**
+```
+Success: 17, Failures: 4
+OK:   test_base_blogs_has_itar_banner
+OK:   test_base_blogs_howto_name_title
+OK:   test_base_blogs_should403
+OK:   test_base_blogs_wildcard
+OK:   test_base_has_itar_banner
+OK:   test_base_mobi_training_slide_badname
+OK:   test_base_mobi_training_slide_download
+OK:   test_base_mobi_training_title
+FAIL: test_base_status
+OK:   test_base_title
+OK:   test_catalog_title
+OK:   test_lode_extract_page
+FAIL: test_mobi_api_get_users      
+FAIL: test_mobi_api_get_users_badlink   
+FAIL: test_mobi_title
+OK:   test_publisher_title
+OK:   test_vocabularies_invalid_resource_lode
+OK:   test_vocabularies_invalid_resource_rdf
+OK:   test_vocabularies_wildcard_lode
+OK:   test_vocabularies_wildcard_rdf
+OK:   test_webvowl_default_page
 
 ```
-####################################################################################
-# STEP-3: Wrap everything neatly in a simple dockerfile  
-####################################################################################
-cat > Dockerfile << EOF
-# use node as container base-image
-FROM node:16
-# inject environment variables & copy the suff we pulled from git to the container
-ENV SECRET_WORD    TwelveFactor
-COPY . .
-# fetch and install node version manager & dependecy packages
-RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.34.0/install.sh | bash \
-    && . ~/.nvm/nvm.sh \
-    && nvm install 16 \
-    && npm install
-# run express server
-CMD ["npm", "start"]
-EOF
-```
+--- 
+### v0.3 - (2022-JAN) tf-iac-elb branched from above by Joe Negron
+GOAL: ELB in front of ALB for all ECS services as FE to above fargate cluster via jenkins+tf
+- MOD: routing rules to ALB01 as per spec
+- FIX: streamlined EDX code for containers to eliminate individual ALBs
+- ADD: helper scripts to quickly enable & disable tf files
+- MOD: simplified dir structure for git-root & tf-root 
+- ADD: DNS & wildcard certs for qa.ontologyhub.rtx.com (manually)
 
-### ROADMAP DAY-0 - CAVEAT EMPTOR: YOU ARE --> HERE!
-## Prerequisites
-
-1.  AWS CLI installed with appropriate IAM role access (e.g. EC2, ECR, ECS, logs, etc.). See this [AWS CLI documentation](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html) details on how to set this up - if you need.
-
-1.  AWS access key and secret key stored in their default location, or Terraform configured to know where to find valid credentials.  
-
-1. Install and configure [Terraform](https://developer.hashicorp.com/terraform/tutorials/aws-get-started/install-cli) version 0.13 or better
-
-1. That's it!
-
-**Deployment example using git:**
-```
-git clone https://github.com/wwwizards/MY_PUBLIC_REPO_NAME.git
-terraform init && terraform apply
-```
-
-NOTE: From my experience it takes somewhere between 5-7 minutes to deploy.
-
-### ROADMAP DAY-1 - Production Readiness Efforts 
-
-This solution (AS-REQIRED & AS-DESIGNED) is my Quick & Dirty Proof of Concept (POC), and as such is not intended to be maintained by more than maybe just a few DevOps folks in a simple-environment (small-shop or sandbox) scenario. Although the solution iself is scalable, the maintenance of this code and the associated terraform state(s) may need to be refactored in order to utilze storage of said (state) files into S3, and possibly also implement record locking via DynamoDB. Many of us have learned (the hard way) that things can get kinda hairy when the right-hand doesn't know what the left-hand is doing -- so: before deploying this solution into production, it may become necessary to create a few extra vars and split out the configuration details into separate files for each environment, and maybe also have a better plan for maintaining the state files somewhere where they won't get clobbered by having too many cooks in the kitchen.  I will be happy to provide examples (and even some plug-n-play sample code) upon request.
-
-### Improvements DAY-2
-
-1. - **Implement Continuous Integration** : using Jenkins or Codebuild some other CI pipeline that imports this GitHub repo's latest master branch when triggered by a commit using some kind of hook. 
-      -  The additional ``jenkinsfile`` ``buildspec.yml`` and ``Dockerfile`` should direct the CI to create a Docker image from the latest build of the Rearc Quest application, and then push that resulting Docker image into an ECR repository for storage and deployment in Phase-two. 
-   -  Additionally we can utilize DoD-Spec (pre-hardened) base-images by using [Iron Bank](https://p1.dso.mil/products/iron-bank). It's free (as in free beer) makes our jobs easier, keeps the CyberSecurity folks happy, and decreases the blast-radius of those CRITICAL & HIGH errors you will inevitably see in the ECR scan results - usually within a day or two. 
-1. **Implement tagging module** to produce standard tags on all resources  
-1. **Replace EC2 nodes & ASG with an ECS cluster** - by adding a few task & service definitions, we can utilize the basic HA auto scaling configurations that are built into ECS - to run the "dockerized" version of the Rearc Quest application using an AWS-Fargate serverless solution. 
-   - The ECS cluster can be routed through the same VPC and Loadbalancer (already provisioned) and cutover with a BLUE/GREEN deployment method and zero-downtime. 
-
-## Current Limitations | Possible Improvements
-
-* Using source-code repositories to access the project files is somewhat advantageous as it ensures the most recent version of the project is utilized for the build process, but an obvious drawback is the build process will only be possible as long as the repositories remain public. While my instinct was to implement a solution without the need to rehost the source files, there is no doubt it would be simpler to just fork the original rearc/quest project, and adjust/add content as needed.
-
-* The current infrastructure setup only takes advantage of basic application autoscaling and loadbalancer configurations in its current setup. Additionally, AWS Fargate engine was utilized to further streamline the process of managing the computing and network resources. No doubt there would be a benefit to explore manual configurations settings in these regards to have greater handling of optimization and allocation of resources.
-
-* The current SSL certificate is self-signed and was created on a local device with openssl. While a self-signed SSL certificate is fine for development/testing purposes, it would NEVER be acceptable for usage with a production web application. Additionally, a self-signed SSL certificate of this type will cause a security warning on any modern web browser when navigating to an HTTPS access point. It is possible to circumvent the security warning on some browsers (e.g. Safari), while others (e.g. Chrome) make it significantly more difficult to proceed.
+test with existing jenkins pipelines
+---
 
 
+## Apps
+----
+There are 4 apps for which AWS infrastructure will be created. Apps are listed below
+- lode
+- portal
+- publisher
+- webvowl
+- skos (comming soon)
+
+## Variables
+----
+All the variables are declared in [terraform.auto.tfvars](terraform.auto.tfvars) file (THIS IS ONLY PART TRUE)
+1. the file does not exist 
+1. if it did it would be used as an alternative to using the "-var-file" flag. Files named with the ".auto.tfvars" extension will be loaded automatically, similar to the "terraform.tfvars" file. 
+1. Since they are using multiple environments there are XXX.tfvars files in the config folder - where XXX = the environment name (i.e. dev, qa & prod). This is the only way to manage resources in multiple environments but does not address multiple AWS accounts or access via roles
+
+(more to follow - this is a critical part of the design and must be updated later)
+
+<br />
+
+### Explanation of variables
+----
+| Variable Name                 | Explanation   |
+| :---                          | :---          |
+| region                        | aws region in which resources will be created |
+| stage                         | stage name that will append with resources |
+| indicated_workspace           | workspace name to append with resources |
+| label_namespace               | label namespace for the resources |
+| label_name                    | label name used for tagging |
+| tag_data_classification       | variable for the classification of tags |
+| tag_organization              | organization name for tagging |
+| tag_business_unit             | business unit for tagging |
+| tag_tool                      | tool name for tagging |
+| tag_author                    | author name that will create resources |
+| tag_team                      | team name that will create resources |
+| tag_project                   | project name for tagging |
+| vpc                           | vpc tags key/value in which resources will be created |
+| route53_hostedzone_private    | route53 hosted zone to create dns records |
+| profile                       | aws profile name used to  create resources |
+| acm_certificate_arn           | ssl certificates arn used by application load balancer |
+
+<br />
+
+## Files and  Apps Components
+----
+### [main.tf](main.tf)
+----
+This file contains ECS cluster resource creation and also calling existing aws resources using data sources for the refrence in other newly created resources. Everything below this looks like a lot of boilerplate cut & paste to satisfy the documentation requirement.
+
+### [svc_lode.tf](svc_lode.tf)
+----
+In this file, AWS resources belonging to `lode` service are creating, this includes ECR Repository, ECS Service, Task Definition, CloudWatch logs group, Application Load Balancer, Listeners, Target Groups, Security Groups, IAM role and Route53 DNS record. 
+
+### [svc_portal.tf](svc_portal.tf)
+----
+In this file, AWS resources belonging to `portal` service are creating, this includes ECR Repository, ECS Service, Task Definition, CloudWatch logs group, Application Load Balancer, Listeners, Target Groups, Security Groups, IAM role and Route53 DNS record. 
+
+### [svc_publisher.tf](svc_publisher.tf)
+----
+In this file, AWS resources belonging to `publisher` service are creating, this includes ECR Repository, ECS Service, Task Definition, CloudWatch logs group, Application Load Balancer, Listeners, Target Groups, Security Groups, IAM role and Route53 DNS record. 
+
+### [svc_webvowl.tf](svc_webvowl.tf)
+----
+In this file, AWS resources belonging to `webvowl` service are creating, this includes ECR Repository, ECS Service, Task Definition, CloudWatch logs group, Application Load Balancer, Listeners, Target Groups, Security Groups, IAM role and Route53 DNS record. 
+
+
+## Terraform Version (tested)
+    Terraform => v1.1.2    
+
+21-1108JN-NOTE: as of this writing, the latest version of terraform is v1.1.2 and v1.2.0 is currently in beta [terraform-versions](https://releases.hashicorp.com/terraform/)
+
+## Deploying Infrastructure
+----
+Edit [terraform.auto.tfvars](terraform.auto.tfvars) file and replace variable values according to your environment then follow the steps below:
+(No "*auto.tfvars" file was ever committed to this repo - more to follow...)
+
+    tfswitch $VERSION		     #A foss tool added by Joe that facilitates downloading & working with different versions of terraform [SOURCE](https://github.com/warrensbox/terraform-switcher)
+    export AWS_PROFILE={dev,qa,prod}   #Sets the named-profile to be used by terraform which has the rights to the appropriate environment and target account [MORE INFO](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-profiles.html)
+    terraform init                     #Initializes terraform
+    terraform validate (added)
+    terraform plan                     #Creates an execution plan
+    terraform apply                    #Execute the plan   
+
+
+
+## Deleting Infrastructure
+----    
+    terraform destroy                  #This will destory all the resources
+
+## Additional Notes
+Per the Terraform documentation on the [Dependency Lock File](https://www.terraform.io/docs/language/dependency-lock.html):
+
+Terraform automatically creates or updates the dependency lock file each time you run the terraform init command. You should include this file in your version control repository so that you can discuss potential changes to your external dependencies via code review, just as you would discuss potential changes to your configuration itself.
+
+The key to understanding why you should commit that file is found in the following section on Dependency Installation Behavior:
+
+When terraform init is working on installing all of the providers needed for a configuration, Terraform considers both the version constraints in the configuration and the version selections recorded in the lock file.
+
+If a particular provider has no existing recorded selection, Terraform will select the newest available version that matches the given version constraint, and then update the lock file to include that selection.
+
+If a particular provider already has a selection recorded in the lock file, Terraform will always re-select that version for installation, even if a newer version has become available. You can override that behavior by adding the -upgrade option when you run terraform init, in which case Terraform will disregard the existing selections and once again select the newest available version matching the version constraint.
+
+Essentially this is intended to have Terraform continue to use the version of the provider selected when you added it. If you do not checkin the lock file, you will always be automatically upgraded to the latest version that obeys the constraint in code, which could lead to unintended consequences.
+
+Note: You can force Terraform to upgrade when doing the init call by passing the -upgrade flag.
